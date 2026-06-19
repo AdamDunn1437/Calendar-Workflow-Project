@@ -1,0 +1,25 @@
+# Tasks
+
+- [x] Inspect repository.
+- [x] Create project scaffold.
+- [x] Add Pydantic domain models.
+- [x] Add calendar interface.
+- [x] Add fake in-memory calendar service.
+- [x] Add conflict detection.
+- [x] Add free-time calculation.
+- [x] Add proposal builder.
+- [x] Add approval boundary.
+- [x] Add workflow orchestrator.
+- [x] Add CLI demonstration.
+- [x] Add unit tests.
+- [x] Add integration tests.
+- [x] Add README and agent instructions.
+- [x] Install dependencies.
+- [x] Run tests.
+- [x] Run formatter or linter.
+- [x] Verify CLI with rejected proposal.
+- [x] Verify CLI with approved proposal.
+- [x] Review git diff.
+- [x] Integrate lightweight AI workflow principles into docs.
+- [ ] Add Google Calendar read integration in a future phase.
+- [ ] Consider a project-specific calendar-planning skill after natural-language parsing exists.
