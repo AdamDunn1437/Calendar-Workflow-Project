@@ -14,6 +14,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+google = [
+    "google-api-python-client>=2.0",
+    "google-auth-httplib2>=0.2",
+    "google-auth-oauthlib>=1.2",
+]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
@@ -21,6 +26,7 @@ dev = [
 
 [project.scripts]
 calendar-agent-demo = "calendar_agent.main:main"
+calendar-agent-google-read = "calendar_agent.google_read_demo:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/calendar_agent"]

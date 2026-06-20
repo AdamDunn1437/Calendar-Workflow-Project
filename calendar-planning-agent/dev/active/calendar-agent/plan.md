@@ -1,5 +1,13 @@
 # Project Plan
 
+## Executive Summary
+
+Build a safe, testable calendar-planning agent in increments: prove deterministic scheduling against an in-memory calendar first, add read-only access across the user's relevant calendars, connect those reads to real planning previews, and only then consider approved writes and validated natural-language input.
+
+## Current State
+
+The fake-calendar MVP and single-calendar Google read-only integration are complete and verified with a real account. The next phase is selecting and aggregating multiple calendars so classes, labs, extracurriculars, and study calendars all contribute to availability. Google writes and natural-language parsing have not started.
+
 ## 1. Fake Calendar MVP
 
 - Create validated models for events, requests, proposals, and workflow state.
@@ -15,19 +23,61 @@
 - Read events only.
 - Keep fake-calendar tests as the core scheduling safety net.
 
-## 3. Google Calendar Write Integration
+Acceptance criteria:
+
+- Google responses are converted into validated `CalendarEvent` models.
+- Read failures are surfaced without changing local or remote calendar state.
+- Credentials and OAuth tokens remain outside version control.
+- Existing fake-calendar tests continue to pass.
+
+Implementation notes:
+
+- `CalendarReader` and write-capable `CalendarService` are separate contracts.
+- OAuth uses only the `calendar.readonly` scope.
+- The adapter expands recurring events, follows pagination, and validates timed and all-day events.
+- A real-account read-only smoke test completed successfully on 2026-06-20.
+
+## 3. Multi-Calendar Read Aggregation
+
+- List calendars available to the authenticated account.
+- Allow explicit selection of calendars that should block time.
+- Read and merge events from every selected calendar.
+- Preserve source-calendar identity for troubleshooting and future display.
+- Continue using read-only OAuth access.
+
+Acceptance criteria:
+
+- Users can discover available calendars without copying IDs from each settings page.
+- Inclusion is explicit and configurable; hidden or irrelevant calendars can be excluded.
+- Events from selected calendars are merged chronologically and duplicate events are handled safely.
+- One calendar failure is reported with its calendar identity and never causes a write.
+- Tests cover pagination, mixed time zones, all-day events, empty calendars, duplicates, and partial API failures.
+
+## 4. Google Calendar Write Integration
 
 - Add event creation behind the same interface.
 - Preserve the approval boundary.
 - Add tests with mocked Google Calendar responses.
 
-## 4. Natural-Language Parsing
+Acceptance criteria:
+
+- Pending and rejected proposals cannot call the external write API.
+- Approved proposals create only the events represented by the validated proposal.
+- Partial failures are reported clearly and do not trigger silent retries or unrelated changes.
+
+## 5. Natural-Language Parsing
 
 - Convert plain-language requests into `SchedulingRequest` data.
 - Validate parsed data before scheduling.
 - Ask for missing required scheduling information instead of inventing it.
 
-## 5. Optional Workflow Framework
+Acceptance criteria:
+
+- Parser output is validated as a `SchedulingRequest` before scheduling begins.
+- Missing or ambiguous required fields are returned for confirmation.
+- Time-slot calculation remains deterministic and outside the language model.
+
+## 6. Optional Workflow Framework
 
 - Consider a workflow framework only after the simple orchestrator becomes hard to maintain.
 - Keep deterministic scheduling logic outside any framework.
@@ -38,3 +88,16 @@
 - Keep docs modular: short overview files first, focused reference files only when a topic grows.
 - Add agentic infrastructure gradually. Start with a single project-specific guide or skill before considering hooks, slash commands, or specialized agents.
 - Treat external infrastructure showcases as pattern libraries, not dependencies.
+
+## Key Risks
+
+- Accidental real-calendar writes: mitigate with read-only integration first and tests at the approval boundary.
+- Ambiguous times or time zones: require explicit values and validate all parsed requests.
+- Credential exposure: use environment configuration and keep token files out of version control.
+- Infrastructure growth outpacing the project: add workflow automation only when a repeated problem justifies it.
+
+## Success Measures
+
+- All scheduling and approval tests remain green through each phase.
+- A new session can identify the current state and next task from the dev docs alone.
+- No external write occurs without a validated, explicitly approved proposal.

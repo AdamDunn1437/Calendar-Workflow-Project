@@ -1,8 +1,8 @@
 # Calendar Planning Agent
 
-This project is the first foundation for a personal calendar-planning workflow. It can inspect a fake in-memory calendar, find free time, detect conflicts, propose events, and create those events only after explicit approval.
+This project is the first foundation for a personal calendar-planning workflow. It can inspect a fake in-memory calendar or read Google Calendar, find free time, detect conflicts, propose events, and create fake-calendar events only after explicit approval.
 
-Google Calendar is intentionally out of scope for this first version. The calendar operations are behind a small interface so a Google Calendar implementation can be added later without changing the scheduling logic.
+Google Calendar access is intentionally read-only. Google writes remain out of scope until the approval and failure behavior is designed and tested separately.
 
 ## Current Capabilities
 
@@ -14,11 +14,14 @@ Google Calendar is intentionally out of scope for this first version. The calend
 - Build proposals using the earliest valid slots first.
 - Require explicit approval before creating events.
 - Demonstrate the workflow with a small command-line program.
+- Read paginated, recurring, timed, and all-day Google Calendar events.
+- Ignore cancelled events and events marked as free by Google Calendar.
 
 ## Architecture
 
 - `models/` contains Pydantic models for events, requests, proposals, and workflow state.
 - `calendar/` contains the calendar interface and fake in-memory implementation.
+- `calendar/google_calendar.py` contains the read-only Google adapter and OAuth bootstrap.
 - `scheduling/` contains deterministic time calculations and proposal construction.
 - `workflow/` coordinates planning, approval, and creation.
 - `main.py` is only a CLI demonstration. Business logic stays outside user input handling.
@@ -41,7 +44,9 @@ Active planning lives in:
 - `dev/active/calendar-agent/context.md`
 - `dev/active/calendar-agent/tasks.md`
 
-Update these files when major decisions change, especially before adding Google Calendar integration or natural-language parsing.
+The local workflow is documented in `dev/README.md`. In short: use `plan.md` for strategy and acceptance criteria, `context.md` for current session state and decisions, and `tasks.md` as the implementation checklist. Update the context and checklist after meaningful progress and leave a concrete quick-resume instruction before ending a session.
+
+This pattern is most useful for multi-session work such as Google Calendar integration or natural-language parsing. Skip it for small, self-contained fixes.
 
 ## Why Approval Exists
 
@@ -61,6 +66,37 @@ Otherwise:
 python -m pip install -e .[dev]
 ```
 
+To include Google Calendar support, install the `google` extra as well:
+
+```powershell
+python -m pip install -e .[dev,google]
+```
+
+## Configure Read-Only Google Calendar Access
+
+1. Create or select a project in Google Cloud Console.
+2. Enable the Google Calendar API.
+3. Configure the OAuth consent screen for your account.
+4. Create an OAuth client with application type **Desktop app**.
+5. Download the client file as `credentials.json` in the project root, or set `GOOGLE_CALENDAR_CREDENTIALS_FILE` to its location.
+6. Copy `.env.example` to `.env` if you want to record local path choices. Export those values in your shell because this project does not automatically load `.env` files.
+
+Run the read-only demonstration:
+
+```powershell
+calendar-agent-google-read
+```
+
+Or run it as a module:
+
+```powershell
+python -m calendar_agent.google_read_demo
+```
+
+The first run opens a browser for consent and stores the refreshable user token at `.secrets/google-calendar-token.json` by default. Credential and token patterns are excluded by `.gitignore`. The adapter requests only Google's `calendar.readonly` OAuth scope and has no `create_event` method.
+
+References: [Google Calendar Python quickstart](https://developers.google.com/workspace/calendar/api/quickstart/python), [Events list reference](https://developers.google.com/workspace/calendar/api/v3/reference/events/list), and [Calendar authorization scopes](https://developers.google.com/workspace/calendar/api/auth).
+
 ## Run The CLI
 
 ```powershell
@@ -77,8 +113,7 @@ pytest
 
 ## Out Of Scope For Now
 
-- Google OAuth
-- Google Calendar reads or writes
+- Google Calendar writes
 - LangChain or LangGraph
 - A database
 - A web frontend
@@ -88,9 +123,11 @@ pytest
 - Claude/Codex hook systems or custom skills
 - Automatic deletion or modification of existing events
 
-## Future Google Calendar Integration
+## Google Calendar Integration
 
-The next phase should add a Google Calendar read service behind the existing `CalendarService` interface. Write support should come later and must preserve the approval boundary already enforced by the workflow.
+`GoogleCalendarReader` implements the read-only `CalendarReader` contract. It expands recurring events into instances, follows page tokens, validates API data as `CalendarEvent` models, and normalizes all-day events using the calendar timezone. Write-capable calendars implement the separate `CalendarService` contract, so the Google reader cannot accidentally be used for creation.
+
+Write support should come later and must preserve the approval boundary already enforced by the workflow.
 
 ## Future AI Workflow Infrastructure
 

@@ -1,4 +1,8 @@
-from calendar_agent.calendar.base import CalendarService
+from calendar_agent.calendar.base import (
+    CalendarReader,
+    CalendarService,
+    CalendarWriteUnsupportedError,
+)
 from calendar_agent.models.scheduling_proposal import CreationStatus, SchedulingProposal
 from calendar_agent.models.scheduling_request import SchedulingRequest
 from calendar_agent.models.workflow_state import ApprovalStatus, WorkflowState
@@ -8,7 +12,7 @@ from calendar_agent.workflow.approval import approve_proposal, create_approved_e
 
 
 class CalendarWorkflow:
-    def __init__(self, calendar_service: CalendarService) -> None:
+    def __init__(self, calendar_service: CalendarReader) -> None:
         self.calendar_service = calendar_service
         self._proposals: dict[str, SchedulingProposal] = {}
 
@@ -61,6 +65,11 @@ class CalendarWorkflow:
                 approval_status=ApprovalStatus.REJECTED,
             )
 
+        if not isinstance(self.calendar_service, CalendarService):
+            raise CalendarWriteUnsupportedError(
+                "this calendar connection is read-only and cannot create events"
+            )
+
         proposal = approve_proposal(proposal)
         created_events = create_approved_events(proposal, self.calendar_service)
         proposal = proposal.model_copy(update={"creation_status": CreationStatus.CREATED})
@@ -71,4 +80,3 @@ class CalendarWorkflow:
             approval_status=ApprovalStatus.APPROVED,
             created_events=created_events,
         )
-

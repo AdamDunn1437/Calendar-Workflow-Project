@@ -11,4 +11,8 @@ build/
 .env
 .env.*
 !.env.example
-
+.secrets/
+credentials.json
+client_secret*.json
+token.json
+*token*.json
