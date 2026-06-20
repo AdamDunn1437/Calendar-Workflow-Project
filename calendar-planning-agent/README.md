@@ -16,6 +16,8 @@ Google Calendar access is intentionally read-only. Google writes remain out of s
 - Demonstrate the workflow with a small command-line program.
 - Read paginated, recurring, timed, and all-day Google Calendar events.
 - Ignore cancelled events and events marked as free by Google Calendar.
+- Discover calendars available to the authenticated Google account.
+- Merge explicitly selected calendars while retaining each event's source.
 
 ## Architecture
 
@@ -81,7 +83,19 @@ python -m pip install -e .[dev,google]
 5. Download the client file as `credentials.json` in the project root, or set `GOOGLE_CALENDAR_CREDENTIALS_FILE` to its location.
 6. Copy `.env.example` to `.env` if you want to record local path choices. Export those values in your shell because this project does not automatically load `.env` files.
 
-Run the read-only demonstration:
+Discover available calendars and their IDs:
+
+```powershell
+python -m calendar_agent.google_calendars_demo
+```
+
+Select the calendars that should block time by setting a comma-separated environment value:
+
+```powershell
+$env:GOOGLE_CALENDAR_IDS="primary,classes@example.com,labs@example.com"
+```
+
+Only explicitly listed calendars are read; the default remains `primary`. Then run the read-only demonstration:
 
 ```powershell
 calendar-agent-google-read
@@ -94,6 +108,25 @@ python -m calendar_agent.google_read_demo
 ```
 
 The first run opens a browser for consent and stores the refreshable user token at `.secrets/google-calendar-token.json` by default. Credential and token patterns are excluded by `.gitignore`. The adapter requests only Google's `calendar.readonly` OAuth scope and has no `create_event` method.
+
+Multi-calendar reads fail closed: if any selected calendar cannot be read, planning receives no partial availability. Events shared across calendars are deduplicated using their Google iCalendar identity and time range. Every retained event records its source calendar ID and display name.
+
+## Preview A Real Schedule
+
+Generate a proposal against the selected Google calendars without creating or modifying anything:
+
+```powershell
+python -m calendar_agent.google_plan_demo `
+  --title "Study session" `
+  --duration 90 `
+  --sessions 3 `
+  --days 7 `
+  --daily-start 09:00 `
+  --daily-end 21:00 `
+  --gap 30
+```
+
+Optional `--start-date YYYY-MM-DD` chooses a future starting date. Without it, the preview starts today. The command prints the busy events considered, proposed sessions, and an explicit confirmation that no Google event was changed.
 
 References: [Google Calendar Python quickstart](https://developers.google.com/workspace/calendar/api/quickstart/python), [Events list reference](https://developers.google.com/workspace/calendar/api/v3/reference/events/list), and [Calendar authorization scopes](https://developers.google.com/workspace/calendar/api/auth).
 
@@ -125,7 +158,7 @@ pytest
 
 ## Google Calendar Integration
 
-`GoogleCalendarReader` implements the read-only `CalendarReader` contract. It expands recurring events into instances, follows page tokens, validates API data as `CalendarEvent` models, and normalizes all-day events using the calendar timezone. Write-capable calendars implement the separate `CalendarService` contract, so the Google reader cannot accidentally be used for creation.
+`GoogleCalendarReader` implements the read-only `CalendarReader` contract. It discovers accessible calendars, reads an explicit selection, expands recurring events into instances, follows page tokens, validates API data as `CalendarEvent` models, and normalizes all-day events using the calendar timezone. Write-capable calendars implement the separate `CalendarService` contract, so the Google reader cannot accidentally be used for creation.
 
 Write support should come later and must preserve the approval boundary already enforced by the workflow.
 

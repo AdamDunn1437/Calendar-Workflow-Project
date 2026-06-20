@@ -32,6 +32,9 @@ class CalendarEvent(BaseModel):
     end: datetime
     description: str = ""
     timezone: str = Field(default=DEFAULT_TIMEZONE_NAME)
+    source_calendar_id: str | None = None
+    source_calendar_name: str | None = None
+    external_uid: str | None = None
 
     @model_validator(mode="after")
     def validate_times(self) -> "CalendarEvent":
@@ -43,4 +46,3 @@ class CalendarEvent(BaseModel):
 
     def as_time_slot(self) -> TimeSlot:
         return TimeSlot(start=self.start, end=self.end)
-

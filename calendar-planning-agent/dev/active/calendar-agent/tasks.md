@@ -39,29 +39,43 @@
 - [x] Complete a real-account read-only smoke test.
   - Acceptance: the demo lists expected events and no write scope or write method is present.
 
-## Phase 3: Multi-Calendar Read Aggregation - Next
+## Phase 3: Multi-Calendar Read Aggregation - Complete
 
-- [ ] List all calendars available to the authenticated account, including paginated results.
+- [x] List all calendars available to the authenticated account, including paginated results.
   - Acceptance: each calendar has an ID, display name, timezone, access role, and visibility metadata.
-- [ ] Define explicit calendar inclusion and exclusion configuration.
+- [x] Define explicit calendar inclusion and exclusion configuration.
   - Acceptance: users can choose which calendars block time without changing source code.
-- [ ] Add source-calendar identity to mapped events or an appropriate wrapper model.
+- [x] Add source-calendar identity to mapped events or an appropriate wrapper model.
   - Acceptance: merged events remain traceable to their original calendar.
-- [ ] Read events from all selected calendars and merge them chronologically.
+- [x] Read events from all selected calendars and merge them chronologically.
   - Acceptance: planning receives one validated event collection across selected calendars.
-- [ ] Define duplicate-event and partial-failure behavior.
+- [x] Define duplicate-event and partial-failure behavior.
   - Acceptance: duplicates do not double-block time and failures identify the affected calendar.
-- [ ] Add tests for discovery, selection, pagination, time zones, all-day events, duplicates, empty calendars, and partial failures.
-- [ ] Add a multi-calendar read demonstration and update user setup documentation.
-- [ ] Run the complete test and lint suite.
+- [x] Add tests for discovery, selection, pagination, time zones, all-day events, duplicates, empty calendars, and partial failures.
+- [x] Add a multi-calendar read demonstration and update user setup documentation.
+- [x] Run the complete test and lint suite.
+- [x] Complete a real-account multi-calendar smoke test.
+  - Acceptance: discovery lists expected calendars and the read demo merges only selected calendars with correct source labels.
 
-## Phase 4: Approved Google Calendar Writes - Not Started
+## Phase 4: Real-Calendar Planning Preview - Complete
+
+- [x] Add explicit CLI arguments for scheduling constraints.
+- [x] Build a validated, timezone-aware `SchedulingRequest` from CLI input.
+- [x] Run `CalendarWorkflow.plan()` against selected Google calendars.
+- [x] Print source-labelled busy events and proposed sessions.
+- [x] Keep the preview path entirely read-only with no approval or creation action.
+- [x] Add unit tests for request construction and invalid argument values.
+- [x] Document preview usage and run the full test and lint suite.
+- [x] Complete a live planning-preview smoke test.
+  - Acceptance: proposed sessions avoid all printed busy events and no Google event is changed.
+
+## Phase 5: Approved Google Calendar Writes - Not Started
 
 - [ ] Design write failure and partial-success behavior before implementation.
 - [ ] Implement writes that are reachable only for approved proposals.
 - [ ] Test pending, rejected, approved, and partial-failure paths with mocked APIs.
 
-## Phase 5: Natural-Language Requests - Not Started
+## Phase 6: Natural-Language Requests - Not Started
 
 - [ ] Define which request fields must be confirmed rather than inferred.
 - [ ] Convert model output into validated `SchedulingRequest` data.
@@ -70,4 +84,4 @@
 
 ## Quick Resume
 
-Start Phase 3 by implementing read-only calendar discovery, then use its metadata to design explicit calendar selection.
+Before Phase 5 implementation, design Google write safety semantics: approval input, idempotency, partial success, retries, conflict rechecking, and rollback limitations.

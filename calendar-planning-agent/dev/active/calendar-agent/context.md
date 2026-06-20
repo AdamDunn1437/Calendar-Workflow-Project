@@ -10,14 +10,18 @@
 - Read-only Google Calendar adapter, OAuth bootstrap, event mapping, and mocked tests.
 - Separate reader and writer contracts so Google reads cannot expose event creation.
 - Real-account OAuth and primary-calendar read smoke test completed successfully.
+- Multi-calendar discovery, explicit selection, source tracking, aggregation, and deduplication implemented.
+- Live multi-calendar aggregation verified with the user's selected calendars.
+- Configurable read-only planning-preview CLI implemented.
+- Live Google-backed planning preview completed successfully without modifying events.
 
 ### In Progress
 
-- Planning multi-calendar discovery, selection, and event aggregation.
+- No implementation task is currently in progress.
 
 ### Blockers
 
-- None. The existing read-only token can be reused for accessible calendars.
+- None. The existing read-only token and selected calendar IDs can be reused.
 
 ### Verification
 
@@ -25,6 +29,10 @@
 - 23 automated tests pass, including pagination, all-day events, ignored events, malformed data, authentication errors, API errors, and read-only workflow behavior.
 - Ruff passes after the Google integration changes.
 - The live demo authenticated successfully and returned events from the primary calendar.
+- 27 automated tests now pass, including calendar discovery, configuration parsing, merging, deduplication, and fail-closed partial errors.
+- 30 automated tests now pass, including planning-preview argument validation and request construction.
+- Live multi-calendar discovery and merged event reads completed successfully.
+- The live planning preview produced proposals against selected calendars and preserved the read-only boundary.
 
 The first project phase uses a fake in-memory calendar. This makes the scheduling behavior testable without credentials, OAuth, network access, or accidental writes to a real calendar.
 
@@ -65,6 +73,9 @@ Future project-specific AI guidance should focus on natural-language request par
 - `src/calendar_agent/calendar/base.py`: calendar service boundary that future integrations must implement.
 - `src/calendar_agent/calendar/fake_calendar.py`: safe in-memory reference implementation.
 - `src/calendar_agent/calendar/google_calendar.py`: read-only Google API adapter and OAuth bootstrap.
+- `src/calendar_agent/google_calendars_demo.py`: lists accessible calendars and selection metadata.
+- `src/calendar_agent/google_read_demo.py`: prints merged events from explicitly selected calendars.
+- `src/calendar_agent/google_plan_demo.py`: builds and prints real-calendar scheduling previews without writes.
 - `src/calendar_agent/workflow/orchestrator.py`: coordinates proposal and creation flow.
 - `src/calendar_agent/workflow/approval.py`: enforces proposal approval state.
 - `src/calendar_agent/models/`: validates requests, events, proposals, and workflow state.
@@ -73,6 +84,6 @@ Future project-specific AI guidance should focus on natural-language request par
 ## Quick Resume
 
 1. Read this file, then `tasks.md`, then the relevant phase in `plan.md`.
-2. Begin Phase 3 by listing calendars available through the Google Calendar API.
-3. Define an explicit include/exclude configuration for calendars that should block time.
-4. Add source-calendar identity before merging events into the planning workflow.
+2. Review Phase 5 before implementing any Google Calendar write capability.
+3. Define write failure, partial-success, retry, and idempotency behavior before requesting broader OAuth scope.
+4. Preserve the existing preview as the required approval input rather than writing directly from a request.
