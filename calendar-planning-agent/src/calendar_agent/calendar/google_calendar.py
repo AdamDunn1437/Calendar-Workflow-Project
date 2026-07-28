@@ -1,6 +1,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time
+from hashlib import sha256
 import os
 from pathlib import Path
 from typing import Any
@@ -12,12 +13,14 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from pydantic import ValidationError
 
-from calendar_agent.calendar.base import CalendarReader
+from calendar_agent.calendar.base import CalendarReader, CalendarService
 from calendar_agent.config import DEFAULT_TIMEZONE_NAME
 from calendar_agent.models.calendar_event import CalendarEvent, ensure_timezone_aware
 from calendar_agent.models.calendar_info import CalendarInfo
+from calendar_agent.scheduling.conflict_checker import conflicts_for_event
 
 GOOGLE_CALENDAR_READONLY_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+GOOGLE_CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events"
 
 
 class GoogleCalendarError(RuntimeError):
@@ -32,11 +35,21 @@ class GoogleCalendarReadError(GoogleCalendarError):
     """Raised when Google events cannot be fetched or validated."""
 
 
+class GoogleCalendarWriteError(GoogleCalendarError):
+    """Raised when an approved Google event cannot be created safely."""
+
+
+class GoogleCalendarConflictError(GoogleCalendarWriteError):
+    """Raised when availability changed after a proposal was built."""
+
+
 @dataclass(frozen=True)
 class GoogleCalendarSettings:
     credentials_path: Path = Path("credentials.json")
     token_path: Path = Path(".secrets/google-calendar-token.json")
+    write_token_path: Path = Path(".secrets/google-calendar-write-token.json")
     calendar_ids: tuple[str, ...] = ("primary",)
+    write_calendar_id: str = "primary"
     default_timezone: str = DEFAULT_TIMEZONE_NAME
 
     @classmethod
@@ -62,37 +75,69 @@ class GoogleCalendarSettings:
                     ".secrets/google-calendar-token.json",
                 )
             ),
+            write_token_path=Path(
+                os.getenv(
+                    "GOOGLE_CALENDAR_WRITE_TOKEN_FILE",
+                    ".secrets/google-calendar-write-token.json",
+                )
+            ),
             calendar_ids=calendar_ids,
+            write_calendar_id=os.getenv("GOOGLE_CALENDAR_WRITE_ID", "primary").strip()
+            or "primary",
             default_timezone=os.getenv("DEFAULT_TIMEZONE", DEFAULT_TIMEZONE_NAME),
         )
 
 
 def build_google_api_service(settings: GoogleCalendarSettings) -> Any:
     """Authorize a local desktop user and return a Calendar API client."""
+    return _build_google_api_service(
+        settings.credentials_path,
+        settings.token_path,
+        [GOOGLE_CALENDAR_READONLY_SCOPE],
+        "read-only Google Calendar access",
+    )
+
+
+def build_google_write_api_service(settings: GoogleCalendarSettings) -> Any:
+    """Authorize event access using a separate token from read-only previews."""
+    return _build_google_api_service(
+        settings.credentials_path,
+        settings.write_token_path,
+        [GOOGLE_CALENDAR_EVENTS_SCOPE],
+        "Google Calendar event access",
+    )
+
+
+def _build_google_api_service(
+    credentials_path: Path,
+    token_path: Path,
+    scopes: list[str],
+    access_description: str,
+) -> Any:
     credentials: Credentials | None = None
 
     try:
-        if settings.token_path.exists():
+        if token_path.exists():
             credentials = Credentials.from_authorized_user_file(
-                str(settings.token_path),
-                [GOOGLE_CALENDAR_READONLY_SCOPE],
+                str(token_path),
+                scopes,
             )
 
         if credentials and credentials.expired and credentials.refresh_token:
             credentials.refresh(Request())
         elif not credentials or not credentials.valid:
             flow = InstalledAppFlow.from_client_secrets_file(
-                str(settings.credentials_path),
-                [GOOGLE_CALENDAR_READONLY_SCOPE],
+                str(credentials_path),
+                scopes,
             )
             credentials = flow.run_local_server(port=0)
 
-        settings.token_path.parent.mkdir(parents=True, exist_ok=True)
-        settings.token_path.write_text(credentials.to_json(), encoding="utf-8")
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text(credentials.to_json(), encoding="utf-8")
         return build("calendar", "v3", credentials=credentials, cache_discovery=False)
     except Exception as exc:
         raise GoogleCalendarAuthenticationError(
-            "could not authorize read-only Google Calendar access"
+            f"could not authorize {access_description}"
         ) from exc
 
 
@@ -258,3 +303,92 @@ class GoogleCalendarReader(CalendarReader):
 
         parsed_date = date.fromisoformat(value["date"])
         return datetime.combine(parsed_date, time.min, ZoneInfo(timezone_name)), timezone_name
+
+
+class GoogleCalendarService(GoogleCalendarReader, CalendarService):
+    """Google reader plus create-only writes to one explicit target calendar."""
+
+    def __init__(
+        self,
+        api_service: Any,
+        *,
+        calendar_ids: tuple[str, ...] = ("primary",),
+        write_calendar_id: str = "primary",
+        default_timezone: str = DEFAULT_TIMEZONE_NAME,
+    ) -> None:
+        super().__init__(
+            api_service,
+            calendar_ids=calendar_ids,
+            default_timezone=default_timezone,
+        )
+        if not write_calendar_id.strip():
+            raise ValueError("a write calendar ID must be selected")
+        self._write_calendar_id = write_calendar_id
+
+    def create_event(self, event: CalendarEvent, force: bool = False) -> CalendarEvent:
+        if not force:
+            conflicts = conflicts_for_event(event, self.list_events(event.start, event.end))
+            if conflicts:
+                conflict_titles = ", ".join(conflict.title for conflict in conflicts)
+                raise GoogleCalendarConflictError(
+                    f"availability changed; event conflicts with: {conflict_titles}"
+                )
+
+        event_id = self._event_id(event)
+        body = {
+            "id": event_id,
+            "summary": event.title,
+            "description": event.description,
+            "start": {"dateTime": event.start.isoformat(), "timeZone": event.timezone},
+            "end": {"dateTime": event.end.isoformat(), "timeZone": event.timezone},
+        }
+        try:
+            response = (
+                self._api_service.events()
+                .insert(calendarId=self._write_calendar_id, body=body)
+                .execute()
+            )
+        except Exception as exc:
+            if getattr(getattr(exc, "resp", None), "status", None) == 409:
+                response = self._get_existing_event(event_id)
+            else:
+                raise GoogleCalendarWriteError(
+                    f"could not create Google event {event.title!r}"
+                ) from exc
+
+        try:
+            return self._map_event(
+                response,
+                self._default_timezone,
+                self._write_calendar_id,
+                self._calendar_names.get(self._write_calendar_id, self._write_calendar_id),
+            )
+        except GoogleCalendarReadError as exc:
+            raise GoogleCalendarWriteError(
+                f"Google created {event.title!r} but returned invalid event data"
+            ) from exc
+
+    def _get_existing_event(self, event_id: str) -> Mapping[str, Any]:
+        try:
+            return (
+                self._api_service.events()
+                .get(calendarId=self._write_calendar_id, eventId=event_id)
+                .execute()
+            )
+        except Exception as exc:
+            raise GoogleCalendarWriteError(
+                "Google reported a duplicate event, but it could not be verified"
+            ) from exc
+
+    @staticmethod
+    def _event_id(event: CalendarEvent) -> str:
+        identity = "|".join(
+            (
+                event.title,
+                event.description,
+                event.start.isoformat(),
+                event.end.isoformat(),
+                event.timezone,
+            )
+        )
+        return f"cpa{sha256(identity.encode('utf-8')).hexdigest()[:40]}"

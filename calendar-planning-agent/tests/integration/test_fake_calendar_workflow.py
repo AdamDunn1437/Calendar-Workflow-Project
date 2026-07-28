@@ -8,6 +8,7 @@ from calendar_agent.models.calendar_event import CalendarEvent
 from calendar_agent.models.workflow_state import ApprovalStatus
 from calendar_agent.models.scheduling_request import SchedulingRequest
 from calendar_agent.workflow.orchestrator import CalendarWorkflow
+from calendar_agent.models.scheduling_proposal import CreationStatus
 
 TZ = ZoneInfo("America/Toronto")
 
@@ -69,3 +70,30 @@ def test_complete_fake_calendar_workflow_creates_after_approval() -> None:
     assert len(result.created_events) == 2
     assert len(calendar.events) == 3
 
+    repeated_result = workflow.approve_and_create(proposal.id, approved=True)
+    assert repeated_result.created_events == result.created_events
+    assert len(calendar.events) == 3
+
+
+class FailOnSecondCreate(FakeCalendarService):
+    def create_event(self, event: CalendarEvent) -> CalendarEvent:
+        if len(self.events) == 1:
+            raise RuntimeError("simulated API failure")
+        return super().create_event(event)
+
+
+def test_partial_creation_is_reported_without_retry_or_rollback() -> None:
+    calendar = FailOnSecondCreate()
+    workflow = CalendarWorkflow(calendar)
+    workflow.plan(request())
+    proposal = workflow.latest_proposal()
+
+    result = workflow.approve_and_create(proposal.id, approved=True)
+
+    assert len(result.created_events) == 1
+    assert "creation stopped" in result.errors[0]
+    assert workflow.latest_proposal().creation_status is CreationStatus.PARTIALLY_CREATED
+
+    repeated_result = workflow.approve_and_create(proposal.id, approved=True)
+    assert repeated_result.created_events == result.created_events
+    assert len(calendar.events) == 1

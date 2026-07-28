@@ -14,7 +14,7 @@ class CalendarService(CalendarReader):
     """A calendar that supports both reads and explicitly approved writes."""
 
     @abstractmethod
-    def create_event(self, event: CalendarEvent) -> CalendarEvent:
+    def create_event(self, event: CalendarEvent, force: bool = False) -> CalendarEvent:
         """Create one event and return the stored event with an ID."""
 
 

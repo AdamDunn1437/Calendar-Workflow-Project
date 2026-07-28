@@ -1,6 +1,6 @@
 # Context
 
-## SESSION PROGRESS (2026-06-20)
+## SESSION PROGRESS (2026-06-23)
 
 ### Completed
 
@@ -14,14 +14,17 @@
 - Live multi-calendar aggregation verified with the user's selected calendars.
 - Configurable read-only planning-preview CLI implemented.
 - Live Google-backed planning preview completed successfully without modifying events.
+- Approved Google create-only adapter, separate write OAuth flow, and interactive write CLI implemented.
+- Conflict rechecks, deterministic event IDs, repeat-approval protection, and partial-failure reporting implemented.
+- Interactive Google write smoke test reported successful by the user on 2026-06-23.
 
 ### In Progress
 
-- No implementation task is currently in progress.
+- No baseline calendar-agent implementation task is currently in progress.
 
 ### Blockers
 
-- None. The existing read-only token and selected calendar IDs can be reused.
+- None.
 
 ### Verification
 
@@ -33,6 +36,8 @@
 - 30 automated tests now pass, including planning-preview argument validation and request construction.
 - Live multi-calendar discovery and merged event reads completed successfully.
 - The live planning preview produced proposals against selected calendars and preserved the read-only boundary.
+- 37 automated tests pass, including Google create mapping, deterministic duplicate verification, pre-insert conflict checks, repeat approval, partial failure, and interactive CLI approval/rejection.
+- Ruff passes after the Google write changes.
 
 The first project phase uses a fake in-memory calendar. This makes the scheduling behavior testable without credentials, OAuth, network access, or accidental writes to a real calendar.
 
@@ -50,7 +55,9 @@ The first project phase uses a fake in-memory calendar. This makes the schedulin
 - Pending proposals cannot create events.
 - Rejected proposals cannot create events.
 - Existing events are never deleted or modified.
-- Google access remains read-only; the current adapter exposes no creation method.
+- `GoogleCalendarReader` remains read-only; `GoogleCalendarService` exposes creation only.
+- Google writes use a separate token and one explicit destination calendar.
+- Write batches stop on failure and never automatically retry, delete, or roll back created events.
 - Credentials must never be committed.
 
 ## Minimum Gap Behavior
@@ -72,10 +79,11 @@ Future project-specific AI guidance should focus on natural-language request par
 
 - `src/calendar_agent/calendar/base.py`: calendar service boundary that future integrations must implement.
 - `src/calendar_agent/calendar/fake_calendar.py`: safe in-memory reference implementation.
-- `src/calendar_agent/calendar/google_calendar.py`: read-only Google API adapter and OAuth bootstrap.
+- `src/calendar_agent/calendar/google_calendar.py`: read-only and create-only Google adapters plus OAuth bootstrap.
 - `src/calendar_agent/google_calendars_demo.py`: lists accessible calendars and selection metadata.
 - `src/calendar_agent/google_read_demo.py`: prints merged events from explicitly selected calendars.
 - `src/calendar_agent/google_plan_demo.py`: builds and prints real-calendar scheduling previews without writes.
+- `src/calendar_agent/google_write_demo.py`: requires an exact interactive approval before creation.
 - `src/calendar_agent/workflow/orchestrator.py`: coordinates proposal and creation flow.
 - `src/calendar_agent/workflow/approval.py`: enforces proposal approval state.
 - `src/calendar_agent/models/`: validates requests, events, proposals, and workflow state.
@@ -84,6 +92,6 @@ Future project-specific AI guidance should focus on natural-language request par
 ## Quick Resume
 
 1. Read this file, then `tasks.md`, then the relevant phase in `plan.md`.
-2. Review Phase 5 before implementing any Google Calendar write capability.
-3. Define write failure, partial-success, retry, and idempotency behavior before requesting broader OAuth scope.
-4. Preserve the existing preview as the required approval input rather than writing directly from a request.
+2. Treat Phases 1-5 as the stable baseline calendar component.
+3. If continuing, design Phase 6 natural-language input as a separate validated layer that produces `SchedulingRequest` values.
+4. Preserve the existing preview and explicit approval flow before every real write.

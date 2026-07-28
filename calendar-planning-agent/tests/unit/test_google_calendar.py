@@ -7,13 +7,18 @@ import pytest
 
 from calendar_agent.calendar.base import CalendarReader, CalendarService
 from calendar_agent.calendar.google_calendar import (
+    GOOGLE_CALENDAR_EVENTS_SCOPE,
     GOOGLE_CALENDAR_READONLY_SCOPE,
     GoogleCalendarAuthenticationError,
+    GoogleCalendarConflictError,
     GoogleCalendarReadError,
     GoogleCalendarReader,
+    GoogleCalendarService,
     GoogleCalendarSettings,
     build_google_api_service,
+    build_google_write_api_service,
 )
+from calendar_agent.models.calendar_event import CalendarEvent
 
 TZ = ZoneInfo("America/Toronto")
 START = datetime(2026, 7, 4, 0, 0, tzinfo=TZ)
@@ -65,6 +70,26 @@ def test_authentication_failure_is_wrapped_and_uses_read_only_scope(tmp_path: Pa
     load_flow.assert_called_once_with(
         str(settings.credentials_path),
         [GOOGLE_CALENDAR_READONLY_SCOPE],
+    )
+
+
+def test_write_authentication_uses_separate_token_and_event_scope(tmp_path: Path) -> None:
+    settings = GoogleCalendarSettings(
+        credentials_path=tmp_path / "missing-credentials.json",
+        token_path=tmp_path / "read-token.json",
+        write_token_path=tmp_path / "write-token.json",
+    )
+
+    with patch(
+        "calendar_agent.calendar.google_calendar.InstalledAppFlow.from_client_secrets_file",
+        side_effect=FileNotFoundError,
+    ) as load_flow:
+        with pytest.raises(GoogleCalendarAuthenticationError, match="event access"):
+            build_google_write_api_service(settings)
+
+    load_flow.assert_called_once_with(
+        str(settings.credentials_path),
+        [GOOGLE_CALENDAR_EVENTS_SCOPE],
     )
 
 
@@ -283,3 +308,84 @@ def test_list_events_requires_a_valid_timezone_aware_window() -> None:
 
     with pytest.raises(ValueError, match="end must be after start"):
         reader.list_events(END, START)
+
+
+def test_google_service_rechecks_conflicts_before_insert() -> None:
+    api, events_resource = api_with_responses(
+        {
+            "items": [
+                {
+                    "id": "new-conflict",
+                    "summary": "New meeting",
+                    "start": {"dateTime": "2026-07-04T10:00:00-04:00"},
+                    "end": {"dateTime": "2026-07-04T11:00:00-04:00"},
+                }
+            ]
+        }
+    )
+    event = CalendarEvent(
+        title="Focus",
+        start=datetime(2026, 7, 4, 10, 0, tzinfo=TZ),
+        end=datetime(2026, 7, 4, 11, 0, tzinfo=TZ),
+    )
+
+    with pytest.raises(GoogleCalendarConflictError, match="availability changed"):
+        GoogleCalendarService(api).create_event(event)
+
+    events_resource.insert.assert_not_called()
+
+
+def test_google_service_creates_event_on_explicit_target_calendar() -> None:
+    api, events_resource = api_with_responses({"items": []})
+    events_resource.insert.return_value.execute.return_value = {
+        "id": "created-1",
+        "summary": "Focus",
+        "description": "Deep work",
+        "start": {"dateTime": "2026-07-04T10:00:00-04:00"},
+        "end": {"dateTime": "2026-07-04T11:00:00-04:00"},
+    }
+    event = CalendarEvent(
+        title="Focus",
+        description="Deep work",
+        start=datetime(2026, 7, 4, 10, 0, tzinfo=TZ),
+        end=datetime(2026, 7, 4, 11, 0, tzinfo=TZ),
+    )
+
+    created = GoogleCalendarService(
+        api,
+        calendar_ids=("busy",),
+        write_calendar_id="target",
+    ).create_event(event)
+
+    assert created.id == "created-1"
+    assert created.source_calendar_id == "target"
+    insert = events_resource.insert.call_args.kwargs
+    assert insert["calendarId"] == "target"
+    assert insert["body"]["summary"] == "Focus"
+    assert insert["body"]["id"].startswith("cpa")
+
+
+def test_google_service_verifies_deterministic_duplicate_instead_of_reinserting() -> None:
+    class DuplicateError(RuntimeError):
+        resp = type("Response", (), {"status": 409})()
+
+    api, events_resource = api_with_responses({"items": []})
+    events_resource.insert.return_value.execute.side_effect = DuplicateError
+    events_resource.get.return_value.execute.return_value = {
+        "id": "existing-deterministic-id",
+        "summary": "Focus",
+        "start": {"dateTime": "2026-07-04T10:00:00-04:00"},
+        "end": {"dateTime": "2026-07-04T11:00:00-04:00"},
+    }
+    event = CalendarEvent(
+        title="Focus",
+        start=datetime(2026, 7, 4, 10, 0, tzinfo=TZ),
+        end=datetime(2026, 7, 4, 11, 0, tzinfo=TZ),
+    )
+
+    created = GoogleCalendarService(api).create_event(event)
+
+    assert created.id == "existing-deterministic-id"
+    assert events_resource.insert.call_count == 1
+    requested_id = events_resource.insert.call_args.kwargs["body"]["id"]
+    assert events_resource.get.call_args.kwargs["eventId"] == requested_id

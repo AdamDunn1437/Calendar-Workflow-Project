@@ -28,11 +28,12 @@ class FakeCalendarService(CalendarService):
             if intervals_overlap(event.start, event.end, start, end)
         ]
 
-    def create_event(self, event: CalendarEvent) -> CalendarEvent:
-        conflicts = conflicts_for_event(event, self._events)
-        if conflicts:
-            conflict_titles = ", ".join(conflict.title for conflict in conflicts)
-            raise CalendarConflictError(f"event conflicts with existing events: {conflict_titles}")
+    def create_event(self, event: CalendarEvent, force: bool = False) -> CalendarEvent:
+        if not force:
+            conflicts = conflicts_for_event(event, self._events)
+            if conflicts:
+                conflict_titles = ", ".join(conflict.title for conflict in conflicts)
+                raise CalendarConflictError(f"event conflicts with existing events: {conflict_titles}")
 
         stored_event = event.model_copy(update={"id": self._new_id()})
         self._events.append(stored_event)

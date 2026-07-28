@@ -6,7 +6,7 @@ Build a safe, testable calendar-planning agent in increments: prove deterministi
 
 ## Current State
 
-The fake-calendar MVP, Google read-only integration, multi-calendar aggregation, and configurable real-calendar planning preview are complete and verified with a real account. Google writes and natural-language parsing have not started.
+The baseline calendar agent is complete through approved Google writes. Google reads, multi-calendar planning, and the interactive write path have been exercised with a real account; automated tests cover success and safety failures. Natural-language parsing has not started and remains a separate future layer.
 
 ## 1. Fake Calendar MVP
 
@@ -92,6 +92,14 @@ Acceptance criteria:
 - Pending and rejected proposals cannot call the external write API.
 - Approved proposals create only the events represented by the validated proposal.
 - Partial failures are reported clearly and do not trigger silent retries or unrelated changes.
+
+Implementation notes:
+
+- Read-only and write-enabled OAuth tokens are stored separately.
+- One explicit `GOOGLE_CALENDAR_WRITE_ID` receives created events.
+- Availability is rechecked before every sequential insert.
+- Creation stops on the first failure; completed inserts are reported without retry or rollback.
+- Deterministic event IDs and workflow state prevent duplicate inserts.
 
 ## 6. Natural-Language Parsing
 

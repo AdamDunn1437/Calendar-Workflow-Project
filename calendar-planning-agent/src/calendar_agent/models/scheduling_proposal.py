@@ -11,6 +11,7 @@ from calendar_agent.models.workflow_state import ApprovalStatus
 class CreationStatus(str, Enum):
     NOT_CREATED = "NOT_CREATED"
     CREATED = "CREATED"
+    PARTIALLY_CREATED = "PARTIALLY_CREATED"
     FAILED = "FAILED"
 
 
@@ -20,5 +21,5 @@ class SchedulingProposal(BaseModel):
     proposed_events: list[CalendarEvent] = Field(default_factory=list)
     approval_status: ApprovalStatus = ApprovalStatus.PENDING
     creation_status: CreationStatus = CreationStatus.NOT_CREATED
+    created_events: list[CalendarEvent] = Field(default_factory=list)
     failure_reason: str | None = None
-

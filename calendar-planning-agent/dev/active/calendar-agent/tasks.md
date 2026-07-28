@@ -69,11 +69,16 @@
 - [x] Complete a live planning-preview smoke test.
   - Acceptance: proposed sessions avoid all printed busy events and no Google event is changed.
 
-## Phase 5: Approved Google Calendar Writes - Not Started
+## Phase 5: Approved Google Calendar Writes - Complete
 
-- [ ] Design write failure and partial-success behavior before implementation.
-- [ ] Implement writes that are reachable only for approved proposals.
-- [ ] Test pending, rejected, approved, and partial-failure paths with mocked APIs.
+- [x] Design write failure, idempotency, conflict recheck, retry, and partial-success behavior.
+- [x] Keep broader OAuth permission in a separate token from read-only access.
+- [x] Implement create-only writes to one explicit destination calendar.
+- [x] Keep writes reachable only through approved proposals.
+- [x] Test pending, rejected, approved, conflict, repeat-approval, and partial-failure paths.
+- [x] Test the interactive CLI rejection and exact-approval paths end to end with a mocked API.
+- [x] Run the full test and lint suite.
+- [x] Complete one deliberate live write smoke test (user-reported successful on 2026-06-23).
 
 ## Phase 6: Natural-Language Requests - Not Started
 
@@ -84,4 +89,4 @@
 
 ## Quick Resume
 
-Before Phase 5 implementation, design Google write safety semantics: approval input, idempotency, partial success, retries, conflict rechecking, and rollback limitations.
+The baseline calendar agent is complete through approved Google writes. Keep Phase 6 natural-language work separate so the deterministic scheduler and approval boundary remain stable.

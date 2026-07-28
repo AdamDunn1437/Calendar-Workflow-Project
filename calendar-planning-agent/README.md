@@ -1,8 +1,6 @@
 # Calendar Planning Agent
 
-This project is the first foundation for a personal calendar-planning workflow. It can inspect a fake in-memory calendar or read Google Calendar, find free time, detect conflicts, propose events, and create fake-calendar events only after explicit approval.
-
-Google Calendar access is intentionally read-only. Google writes remain out of scope until the approval and failure behavior is designed and tested separately.
+This project is the first foundation for a personal calendar-planning workflow. It can inspect a Google Calendar, find free time, detect conflicts, propose events, and create events only after explicit approval.
 
 ## Current Capabilities
 
@@ -18,12 +16,14 @@ Google Calendar access is intentionally read-only. Google writes remain out of s
 - Ignore cancelled events and events marked as free by Google Calendar.
 - Discover calendars available to the authenticated Google account.
 - Merge explicitly selected calendars while retaining each event's source.
+- Create approved proposals on one explicitly configured Google calendar.
+- Stop and report partial success without automatic retries or rollback.
 
 ## Architecture
 
 - `models/` contains Pydantic models for events, requests, proposals, and workflow state.
 - `calendar/` contains the calendar interface and fake in-memory implementation.
-- `calendar/google_calendar.py` contains the read-only Google adapter and OAuth bootstrap.
+- `calendar/google_calendar.py` contains separate read-only and write-capable Google adapters.
 - `scheduling/` contains deterministic time calculations and proposal construction.
 - `workflow/` coordinates planning, approval, and creation.
 - `main.py` is only a CLI demonstration. Business logic stays outside user input handling.
@@ -130,6 +130,24 @@ Optional `--start-date YYYY-MM-DD` chooses a future starting date. Without it, t
 
 References: [Google Calendar Python quickstart](https://developers.google.com/workspace/calendar/api/quickstart/python), [Events list reference](https://developers.google.com/workspace/calendar/api/v3/reference/events/list), and [Calendar authorization scopes](https://developers.google.com/workspace/calendar/api/auth).
 
+## Create Approved Google Events
+
+Google writes use a separate OAuth token so the read-only preview remains least-privileged. Choose exactly one destination calendar:
+
+```powershell
+$env:GOOGLE_CALENDAR_WRITE_ID="primary"
+```
+
+Then run the write workflow with the same scheduling arguments as the preview:
+
+```powershell
+python -m calendar_agent.google_write_demo --title "Study session" --duration 90 --sessions 3
+```
+
+The command prints the complete proposal and creates nothing unless you type `yes`. Immediately before each insert, it rereads availability and rejects a newly conflicting event. Events are inserted sequentially. A failure stops the batch; successful earlier inserts are reported and are not automatically retried, deleted, or rolled back. Repeating approval within the same workflow does not create duplicates, and deterministic Google event IDs provide an additional duplicate-insert safeguard.
+
+The first write run opens a new consent flow for Google's `calendar.events` scope and stores it at `.secrets/google-calendar-write-token.json` by default. The existing read-only token remains unchanged. Keep both token files outside version control.
+
 ## Run The CLI
 
 ```powershell
@@ -146,7 +164,7 @@ pytest
 
 ## Out Of Scope For Now
 
-- Google Calendar writes
+- Updating or deleting Google Calendar events
 - LangChain or LangGraph
 - A database
 - A web frontend
@@ -158,9 +176,7 @@ pytest
 
 ## Google Calendar Integration
 
-`GoogleCalendarReader` implements the read-only `CalendarReader` contract. It discovers accessible calendars, reads an explicit selection, expands recurring events into instances, follows page tokens, validates API data as `CalendarEvent` models, and normalizes all-day events using the calendar timezone. Write-capable calendars implement the separate `CalendarService` contract, so the Google reader cannot accidentally be used for creation.
-
-Write support should come later and must preserve the approval boundary already enforced by the workflow.
+`GoogleCalendarReader` implements the read-only `CalendarReader` contract. `GoogleCalendarService` implements the write-capable `CalendarService` contract and only creates events after the workflow approves a validated proposal. Updating and deleting events are not exposed.
 
 ## Future AI Workflow Infrastructure
 

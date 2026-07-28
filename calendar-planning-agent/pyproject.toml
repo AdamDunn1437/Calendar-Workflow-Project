@@ -29,6 +29,8 @@ calendar-agent-demo = "calendar_agent.main:main"
 calendar-agent-google-read = "calendar_agent.google_read_demo:main"
 calendar-agent-google-calendars = "calendar_agent.google_calendars_demo:main"
 calendar-agent-google-plan = "calendar_agent.google_plan_demo:main"
+calendar-agent-google-write = "calendar_agent.google_write_demo:main"
+calendar-agent-course-import = "calendar_agent.course_import_demo:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/calendar_agent"]
